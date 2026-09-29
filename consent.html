@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#4C8288">
+<title>やること｜接続の確認</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root { --bg: #EEF2F1; --ink: #22302F; --sub: #6D7B7A; --line: #DCE3E2; --teal: #4C8288; --red: #953525; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Meiryo", sans-serif; }
+  .box { background: #fff; border-radius: 14px; padding: 28px 24px; max-width: 420px; width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,.08); text-align: center; }
+  h1 { color: var(--teal); font-size: 20px; letter-spacing: .1em; margin: 0 0 16px; }
+  p { color: var(--sub); line-height: 1.8; margin: 0 0 12px; }
+  .client { font-weight: 700; color: var(--ink); }
+  .who { font-size: 12px; background: #F1F4F4; border-radius: 8px; padding: 6px 10px; display: inline-block; margin-bottom: 16px; }
+  .btns { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
+  button { border: none; border-radius: 8px; padding: 11px 22px; font: inherit; font-weight: 600; cursor: pointer; }
+  .ok { background: var(--teal); color: #fff; }
+  .no { background: #fff; color: var(--sub); border: 1px solid var(--line); }
+  .err { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="box" id="box"><h1>やること</h1><p>確認しています…</p></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+// Claude などのアプリが「やること」に接続するときの確認画面。
+// Supabase が ?authorization_id=… を付けてここへ連れてくる。
+const box = document.getElementById('box');
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const id = new URLSearchParams(location.search).get('authorization_id');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const show = html => { box.innerHTML = '<h1>やること</h1>' + html; };
+
+async function main() {
+  if (!id) return show('<p class="err">接続のための情報がありません。<br>Claude の画面から、もう一度「接続」を押してください。</p>');
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    show('<p>接続する前に、Googleアカウントでログインしてください。</p><div class="btns"><button class="ok" id="login">Googleでログイン</button></div>');
+    document.getElementById('login').onclick = () =>
+      sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.href } });
+    return;
+  }
+
+  const { data, error } = await sb.auth.oauth.getAuthorizationDetails(id);
+  if (error) return show(`<p class="err">確認できませんでした：${esc(error.message)}</p><p>Claude の画面から、もう一度「接続」を押してください。</p>`);
+  if (!('authorization_id' in data)) { location.href = data.redirect_url; return; } // 許可済み
+
+  const name = data.client?.name || data.client?.client_name || '外部のアプリ';
+  show(`<p><span class="client">${esc(name)}</span> が、あなたの「やること」を<br>読んだり直したりできるようにします。</p>
+    <div class="who">ログイン中：${esc(session.user.email)}</div>
+    <p style="font-size:12px">心当たりがなければ「やめる」を押してください。</p>
+    <div class="btns"><button class="no" id="deny">やめる</button><button class="ok" id="approve">許可する</button></div>`);
+  document.getElementById('approve').onclick = () => decide(true);
+  document.getElementById('deny').onclick = () => decide(false);
+}
+
+async function decide(ok) {
+  show('<p>戻っています…</p>');
+  const { data, error } = ok ? await sb.auth.oauth.approveAuthorization(id) : await sb.auth.oauth.denyAuthorization(id);
+  if (error) return show(`<p class="err">うまくいきませんでした：${esc(error.message)}</p>`);
+  location.href = data.redirect_url;
+}
+
+main().catch(e => show(`<p class="err">エラー：${esc(e.message || e)}</p>`));
+</script>
+</body>
+</html>
