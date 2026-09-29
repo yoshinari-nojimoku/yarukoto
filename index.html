@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4C8288">
+<title>やること</title>
+<link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="やること">
+</head>
+<body>
+<header>
+  <h1>やること</h1><span class="date" id="today"></span>
+  <label class="showdone"><input type="checkbox" id="showDone"> 完了も表示 <span id="doneCount"></span></label>
+  <div class="filters" id="filters"></div>
+  <span class="account" id="account"></span>
+</header>
+
+<div class="nudgebar" id="nudgebar"></div>
+
+<!-- スマホ幅のときだけ出る、優先度の切り替えタブ -->
+<nav class="pritabs" id="pritabs"></nav>
+
+<main class="board" id="board"></main>
+
+<button class="fab" id="fab">＋ タスク</button>
+
+<!-- 追加・編集フォーム -->
+<div class="overlay" id="overlay" hidden>
+  <form class="sheet" id="form" autocomplete="off">
+    <h2 id="formTitle">タスクを追加</h2>
+
+    <label class="f">タイトル
+      <input type="text" id="fTitle" required placeholder="例：セカンド10号の見積をそろえる">
+    </label>
+
+    <label class="f">メモ
+      <textarea id="fMemo" rows="2" placeholder="リンクや補足（URLはクリックで開けます）"></textarea>
+    </label>
+
+
+    <label class="f">親タスク
+      <select id="fParent"></select>
+      <small id="parentNote"></small>
+    </label>
+
+    <div class="f" id="priRow">優先度
+      <div class="seg" id="fPri">
+        <button type="button" data-pri="3">高</button><button type="button" data-pri="2">中</button><button type="button" data-pri="1">低</button>
+      </div>
+    </div>
+
+    <label class="f" id="catRow">カテゴリー
+      <select id="fCat"></select>
+    </label>
+
+    <div class="f">締め切り
+      <div class="dateline">
+        <input type="date" id="fDue">
+        <button type="button" class="chip" data-due="0">今日</button>
+        <button type="button" class="chip" data-due="1">明日</button>
+        <button type="button" class="chip" data-due="7">1週間後</button>
+        <button type="button" class="chip" data-due="">なし</button>
+      </div>
+    </div>
+
+    <label class="f">繰り返し <small>完了にすると、次の回のタスクを自動で作ります</small>
+      <select id="fRepeat"></select>
+    </label>
+
+    <fieldset class="ask">
+      <legend>人に頼んだタスク</legend>
+      <label class="f">依頼先
+        <input type="text" id="fWho" placeholder="例：工場長（自分でやるなら空欄）">
+      </label>
+      <div class="f">催促日 <small>この日を過ぎても返事がなければ「返事来ましたか？」と通知</small>
+        <div class="dateline">
+          <input type="date" id="fRemind">
+          <button type="button" class="chip" data-remind="3">3日後</button>
+          <button type="button" class="chip" data-remind="7">1週間後</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="button" class="del" id="fDelete">削除</button>
+      <button type="button" class="cancel" id="fCancel">やめる</button>
+      <button type="submit" class="save">保存</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ログイン・移し替えの画面 -->
+<div class="gate" id="gate" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="categories.js"></script>
+<!-- seed.js は試作モードの初期データ（公開しない。GitHubには上げない） -->
+<script src="seed.js" onerror="this.remove()"></script>
+<script src="store.js"></script>
+<script src="repeat.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
