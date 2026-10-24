@@ -21,6 +21,9 @@
   .ok { background: var(--teal); color: #fff; }
   .no { background: #fff; color: var(--sub); border: 1px solid var(--line); }
   .err { color: var(--red); }
+  .dest { font-size: 12px; margin: -6px 0 12px; }
+  .warn { background: #FBEDEA; color: var(--red); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.7; margin-bottom: 12px; text-align: left; }
+  .warn b { display: block; margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -36,6 +39,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const id = new URLSearchParams(location.search).get('authorization_id');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const show = html => { box.innerHTML = '<h1>やること</h1>' + html; };
+// 許可したあとの戻り先。アプリの名前は相手が自由に名乗れるので、戻り先のドメインで本物か見分ける
+const TRUSTED = ['claude.ai', 'claude.com'];
+const destHost = u => { try { return new URL(u).hostname; } catch (e) { return ''; } };
+const trusted = h => TRUSTED.some(d => h === d || h.endsWith('.' + d));
 
 async function main() {
   if (!id) return show('<p class="err">接続のための情報がありません。<br>Claude の画面から、もう一度「接続」を押してください。</p>');
@@ -53,11 +60,19 @@ async function main() {
   if (!('authorization_id' in data)) { location.href = data.redirect_url; return; } // 許可済み
 
   const name = data.client?.name || data.client?.client_name || '外部のアプリ';
+  const host = destHost(data.redirect_uri);
+  const safe = trusted(host);
   show(`<p><span class="client">${esc(name)}</span> が、あなたの「やること」を<br>読んだり直したりできるようにします。</p>
+    <p class="dest">許可したあとの戻り先：<b>${esc(host || '（確認できません）')}</b></p>
+    ${safe ? '' : `<div class="warn"><b>⚠ Claude の画面ではない所へ戻ります</b>
+      名前が「Claude」でも、戻り先が claude.ai でなければ別物です。自分で接続ボタンを押した覚えがなければ、「やめる」を押してください。</div>`}
     <div class="who">ログイン中：${esc(session.user.email)}</div>
     <p style="font-size:12px">心当たりがなければ「やめる」を押してください。</p>
-    <div class="btns"><button class="no" id="deny">やめる</button><button class="ok" id="approve">許可する</button></div>`);
-  document.getElementById('approve').onclick = () => decide(true);
+    <div class="btns"><button class="no" id="deny">やめる</button><button class="ok" id="approve">${safe ? '許可する' : 'それでも許可する'}</button></div>`);
+  document.getElementById('approve').onclick = () => {
+    if (!safe && !confirm(`戻り先は「${host || '不明'}」です。本当に許可しますか？`)) return;
+    decide(true);
+  };
   document.getElementById('deny').onclick = () => decide(false);
 }
 
