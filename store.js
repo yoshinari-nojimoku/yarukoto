@@ -55,7 +55,7 @@ const Store = {
       id: String(t.id), title: t.title, memo: t.memo || null, due: t.due || null, due_approx: !!t.dueApprox,
       cat: t.cat, pri: t.pri, parent_id: t.parent ? String(t.parent) : null, assignee: t.assignee || null,
       remind: t.remind || null, repeat: t.repeat || null, attach: !!t.attach, done: !!t.done,
-      today_on: t.todayOn || null,
+      today_on: t.todayOn || null, ord: t.ord ?? null,
     };
   },
   fromRow(r) {
@@ -66,6 +66,7 @@ const Store = {
     if (r.due_approx) t.dueApprox = true;
     if (r.attach) t.attach = true;
     if (r.today_on) t.todayOn = r.today_on;
+    if (r.ord != null) t.ord = r.ord;
     return t;
   },
 

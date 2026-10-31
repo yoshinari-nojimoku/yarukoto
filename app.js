@@ -51,6 +51,12 @@ function byPriorityThenDue(a, b) {
   return da - db;
 }
 
+// 列の中の並び：ドラッグで決めた順（ord）が先、まだ決めていないカードは締め切り順で後ろに
+function byOrderThenDue(a, b) {
+  const oa = a.ord ?? Infinity, ob = b.ord ?? Infinity;
+  return oa !== ob ? (oa < ob ? -1 : 1) : byPriorityThenDue(a, b);
+}
+
 function save() { Store.save(tasks); }
 function newId() { return crypto.randomUUID(); }
 
@@ -87,7 +93,7 @@ function render() {
   const inFilter = t => filter === 'all' || t.cat === filter;
   const parents = tasks.filter(t => t.parent === null && inFilter(t))
     .filter(p => showDone || !p.done || childrenOf(p.id).some(c => !c.done))
-    .sort(byPriorityThenDue);
+    .sort(byOrderThenDue);
 
   document.getElementById('pritabs').innerHTML = COLS.map(c => {
     const n = parents.filter(p => colOf(p) === c.key).length, on = mobileCol === c.key;
@@ -100,7 +106,7 @@ function render() {
       ? '今日やるカードの「☀ 今日」を押すか<br>ここへ引っぱってきてください'
       : 'ここへカードを引っぱってくると<br>この列に移せます';
     return `<section class="col ${mobileCol === c.key ? 'active' : ''}" data-col="${c.key}">
-      <h2><span class="pill" style="background:${c.color}">${c.name}</span><span class="n">${items.length}件・締め切り順</span>
+      <h2><span class="pill" style="background:${c.color}">${c.name}</span><span class="n">${items.length}件・ドラッグで並べ替え</span>
         <button class="plus" data-addcol="${c.key}" title="「${c.name}」に追加">＋</button></h2>
       ${items.map(cardHtml).join('') || `<div class="empty">${empty}</div>`}
     </section>`;
@@ -200,12 +206,32 @@ function spawnNext(t) {
 function moveTo(id, key) {
   const t = byId(id);
   if (colOf(t) === key) return;
-  const before = { pri: t.pri, todayOn: t.todayOn };
+  const before = { pri: t.pri, todayOn: t.todayOn, ord: t.ord };
   if (key === 'today') t.todayOn = iso(today());
   else { t.todayOn = null; t.pri = key; childrenOf(t.id).forEach(k => k.pri = key); }
+  t.ord = null; // 移した先では一番うしろ（順番を決めたカードのあと）
   save(); render();
   toast(`「${colName(key)}」に移しました`, () => {
-    t.pri = before.pri; t.todayOn = before.todayOn; childrenOf(t.id).forEach(k => k.pri = before.pri); save(); render();
+    t.pri = before.pri; t.todayOn = before.todayOn; t.ord = before.ord; childrenOf(t.id).forEach(k => k.pri = before.pri); save(); render();
+  });
+}
+
+// ドラッグで落とした位置に並べる（別の列なら列も移す）。列の中を 1,2,3… と振り直す
+function dropAt(id, key, beforeId) {
+  const t = byId(id), moved = colOf(t) !== key;
+  const snap = tasks.map(x => [x, x.ord, x.pri, x.todayOn]);
+  if (moved) {
+    if (key === 'today') t.todayOn = iso(today());
+    else { t.todayOn = null; t.pri = key; childrenOf(t.id).forEach(k => k.pri = key); }
+  }
+  // 絞り込みで見えていないカードも含めて、列全体で振り直す
+  const list = tasks.filter(x => x.parent === null && !x.done && x !== t && colOf(x) === key).sort(byOrderThenDue);
+  const at = beforeId ? list.findIndex(x => String(x.id) === String(beforeId)) : -1;
+  list.splice(at < 0 ? list.length : at, 0, t);
+  list.forEach((x, i) => x.ord = i + 1);
+  save(); render();
+  toast(moved ? `「${colName(key)}」に移しました` : '順番を変えました', () => {
+    snap.forEach(([x, o, p, d]) => { x.ord = o; x.pri = p; x.todayOn = d; }); save(); render();
   });
 }
 
@@ -342,18 +368,29 @@ document.addEventListener('dragstart', e => {
   dragId = card.dataset.card; card.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
 });
-document.addEventListener('dragend', e => { e.target.closest?.('[data-card]')?.classList.remove('dragging'); document.querySelectorAll('.col').forEach(c => c.classList.remove('dragover')); });
+document.addEventListener('dragend', e => {
+  e.target.closest?.('[data-card]')?.classList.remove('dragging');
+  document.querySelectorAll('.col').forEach(c => c.classList.remove('dragover'));
+  document.querySelectorAll('.dropbefore').forEach(c => c.classList.remove('dropbefore'));
+});
+// 落とす位置＝マウスより下にある最初のカードの前（無ければ列の一番うしろ）
+function cardBelow(col, y) {
+  return [...col.querySelectorAll('[data-card]')].filter(c => c.dataset.card !== dragId)
+    .find(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; });
+}
 document.addEventListener('dragover', e => {
   const col = e.target.closest('[data-col]');
   if (!col || dragId === null) return;
   e.preventDefault();
   document.querySelectorAll('.col').forEach(c => c.classList.toggle('dragover', c === col));
+  const below = cardBelow(col, e.clientY);
+  document.querySelectorAll('[data-card]').forEach(c => c.classList.toggle('dropbefore', c === below));
 });
 document.addEventListener('drop', e => {
   const col = e.target.closest('[data-col]');
   if (!col || dragId === null) return;
   e.preventDefault();
-  moveTo(dragId, parseCol(col.dataset.col));
+  dropAt(dragId, parseCol(col.dataset.col), cardBelow(col, e.clientY)?.dataset.card);
   dragId = null;
 });
 

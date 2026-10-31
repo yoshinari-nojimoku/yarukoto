@@ -34,6 +34,7 @@ header .date { opacity: .85; font-size: 13px; }
 .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 28px 90px; align-items: start; }
 .col { background: rgba(255,255,255,.45); border-radius: 12px; padding: 10px; min-height: 120px; transition: background .15s; }
 .col.dragover { background: rgba(76,130,136,.18); }
+.card.dropbefore { box-shadow: 0 -4px 0 #4C8288; }
 .col h2 { font-size: 14px; margin: 2px 4px 10px; display: flex; align-items: center; gap: 8px; }
 .col h2 .pill { color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 13px; }
 .col h2 .n { color: var(--sub); font-weight: 400; font-size: 12px; }
