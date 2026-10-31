@@ -148,6 +148,11 @@ function toast(msg, undo) {
 function toggleDone(id) {
   const t = byId(id); t.done = !t.done;
   const { created, closed } = t.done ? spawnNext(t) : { created: [], closed: [] };
+  // 親を済にしたら、残っているサブタスクも一緒に済にする（「元に戻す」で復活）
+  if (t.done && !created.length) {
+    closed.push(...childrenOf(t.id).filter(k => !k.done));
+    closed.forEach(k => k.done = true);
+  }
   save(); render();
   if (!t.done) return;
   const undo = () => {
@@ -155,6 +160,7 @@ function toggleDone(id) {
     tasks = tasks.filter(x => !created.includes(x)); save(); render();
   };
   if (created.length) toast(`完了。次の回（${fmtDate(created[0].due)}）を作りました`, undo);
+  else if (closed.length) toast(`「${t.title.slice(0, 20)}」とサブタスク${closed.length}件を完了にしました`, undo);
   else toast(`「${t.title.slice(0, 20)}」を完了にしました`, undo);
 }
 
