@@ -62,6 +62,8 @@ header .date { opacity: .85; font-size: 13px; }
 .meta .soon { background: #FBEFD5; color: #8A5B00; font-weight: 600; }
 .meta .who { background: #E3EEEF; color: var(--teal); }
 .meta .nudge { background: #F7E0DA; color: var(--red); font-weight: 700; }
+.meta .todaybtn { margin-left: auto; border: 1px solid #3D7753; background: #fff; color: #3D7753; border-radius: 10px; padding: 1px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.meta .todaybtn:hover { background: #3D7753; color: #fff; }
 
 .subs { margin: 8px 0 0 26px; border-top: 1px solid var(--line); padding-top: 6px; }
 .subtoggle { border: none; background: none; color: var(--sub); font-size: 12px; cursor: pointer; padding: 2px 0; }
@@ -98,9 +100,9 @@ header .date { opacity: .85; font-size: 13px; }
 .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; width: fit-content; }
 .seg button { border: none; background: #fff; padding: 7px 22px; cursor: pointer; color: var(--sub); }
 .seg button + button { border-left: 1px solid var(--line); }
+.seg button.on[data-pri="today"] { background: #3D7753; color: #fff; }
 .seg button.on[data-pri="3"] { background: #953525; color: #fff; }
 .seg button.on[data-pri="2"] { background: #A89A2E; color: #fff; }
-.seg button.on[data-pri="1"] { background: #7F9C9F; color: #fff; }
 fieldset.ask { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 0; margin: 0 0 14px; }
 fieldset.ask legend { font-size: 12px; color: var(--teal); padding: 0 4px; }
 .hidden { display: none !important; }

@@ -1,13 +1,20 @@
-// やること（案B 優先度ボード）
-// 並び順：優先度の列ごとに、締め切りが近い順（期限なしは最後）。サブタスクは親カードの中。
+// やること（3列ボード：今日やる／ToDo／そのうちやる）
+// 並び順：列ごとに、締め切りが近い順（期限なしは最後）。サブタスクは親カードの中。
+// 「今日やる」は todayOn に今日の日付を入れた印。日が変わると印が古くなり、元の列に戻る。
 
-const PRI = { 3: '高', 2: '中', 1: '低' };
-const PRI_COLOR = { 3: '#953525', 2: '#A89A2E', 1: '#7F9C9F' };
+// 列。key の数字は DB の pri（3=ToDo、2以下=そのうちやる。旧「優先度 低」もそのうちやるへ）
+const COLS = [
+  { key: 'today', name: '今日やる', color: '#3D7753' },
+  { key: 3, name: 'ToDo', color: '#953525' },
+  { key: 2, name: 'そのうちやる', color: '#A89A2E' },
+];
+const colName = key => COLS.find(c => c.key === key).name;
+const parseCol = v => v === 'today' ? 'today' : +v;
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
 const SUB_FOLD = 3; // サブタスクがこれより多いカードは畳んで表示
 
 let tasks = [];
-let filter = 'all', showDone = false, mobilePri = 3, editingId = null;
+let filter = 'all', showDone = false, mobileCol = 'today', editingId = null;
 const openSubs = new Set();
 
 // ---- 日付 ----
@@ -35,6 +42,8 @@ const catOf = id => CATEGORIES.find(c => c.id === id) || { name: '未分類', co
 const byId = id => tasks.find(t => String(t.id) === String(id));
 const childrenOf = id => tasks.filter(t => t.parent != null && String(t.parent) === String(id));
 const needsNudge = t => !t.done && t.assignee && t.remind && daysLeft(t.remind) <= 0;
+const isToday = t => t.todayOn === iso(today());
+const colOf = t => isToday(t) ? 'today' : (t.pri === 3 ? 3 : 2);
 
 function byPriorityThenDue(a, b) {
   if (a.pri !== b.pri) return b.pri - a.pri;
@@ -80,17 +89,20 @@ function render() {
     .filter(p => showDone || !p.done || childrenOf(p.id).some(c => !c.done))
     .sort(byPriorityThenDue);
 
-  document.getElementById('pritabs').innerHTML = [3, 2, 1].map(pri => {
-    const n = parents.filter(p => p.pri === pri).length;
-    return `<button data-tab="${pri}" class="${mobilePri === pri ? 'on' : ''}" style="${mobilePri === pri ? `background:${PRI_COLOR[pri]}` : ''}">優先度 ${PRI[pri]}（${n}）</button>`;
+  document.getElementById('pritabs').innerHTML = COLS.map(c => {
+    const n = parents.filter(p => colOf(p) === c.key).length, on = mobileCol === c.key;
+    return `<button data-tab="${c.key}" class="${on ? 'on' : ''}" style="${on ? `background:${c.color}` : ''}">${c.name}（${n}）</button>`;
   }).join('');
 
-  document.getElementById('board').innerHTML = [3, 2, 1].map(pri => {
-    const items = parents.filter(p => p.pri === pri);
-    return `<section class="col ${mobilePri === pri ? 'active' : ''}" data-col="${pri}">
-      <h2><span class="pill" style="background:${PRI_COLOR[pri]}">優先度 ${PRI[pri]}</span><span class="n">${items.length}件・締め切り順</span>
-        <button class="plus" data-addpri="${pri}" title="この優先度で追加">＋</button></h2>
-      ${items.map(cardHtml).join('') || '<div class="empty">ここにカードを引っぱってくると<br>優先度が変わります</div>'}
+  document.getElementById('board').innerHTML = COLS.map(c => {
+    const items = parents.filter(p => colOf(p) === c.key);
+    const empty = c.key === 'today'
+      ? '今日やるカードの「☀ 今日」を押すか<br>ここへ引っぱってきてください'
+      : 'ここへカードを引っぱってくると<br>この列に移せます';
+    return `<section class="col ${mobileCol === c.key ? 'active' : ''}" data-col="${c.key}">
+      <h2><span class="pill" style="background:${c.color}">${c.name}</span><span class="n">${items.length}件・締め切り順</span>
+        <button class="plus" data-addcol="${c.key}" title="「${c.name}」に追加">＋</button></h2>
+      ${items.map(cardHtml).join('') || `<div class="empty">${empty}</div>`}
     </section>`;
   }).join('');
 }
@@ -116,7 +128,8 @@ function cardHtml(p) {
       ${p.repeat ? `<span title="${Repeat.parse(p.repeat) ? '完了にすると次の回を自動で作ります' : 'この書き方は読めないため、次の回は作られません'}">🔁 ${esc(p.repeat.replace(/・/g, ' '))}${Repeat.parse(p.repeat) ? '' : ' ⚠'}</span>` : ''}
       ${p.assignee ? `<span class="who">→ ${esc(p.assignee)}</span>` : ''}
       ${needsNudge(p) ? '<span class="nudge">催促日</span>' : ''}
-      ${p.attach ? '<span title="Googleタスクに添付ファイルあり">📎添付</span>' : ''}</div>
+      ${p.attach ? '<span title="Googleタスクに添付ファイルあり">📎添付</span>' : ''}
+      ${p.done ? '' : `<button class="todaybtn" data-today="${p.id}">${isToday(p) ? `↩ ${colName(p.pri === 3 ? 3 : 2)}へ戻す` : '☀ 今日'}</button>`}</div>
     <div class="subs" ${allKids.length ? '' : 'style="border:none;padding-top:0"'}>
       ${folded
         ? `<button class="subtoggle" data-unfold="${p.id}">▸ サブタスク ${kids.length}件を表示</button>`
@@ -171,7 +184,7 @@ function spawnNext(t) {
   const due = Repeat.next(rule, t.due, today());
   const shift = t.due ? Math.round((toDate(due) - toDate(t.due)) / 86400000) : 0;
   const move = s => { if (!s) return s; const d = toDate(s); d.setDate(d.getDate() + shift); return iso(d); };
-  const copy = { ...t, id: newId(), due, remind: move(t.remind), done: false };
+  const copy = { ...t, id: newId(), due, remind: move(t.remind), done: false, todayOn: null };
   delete copy.dueApprox;
   tasks.push(copy);
   const old = childrenOf(t.id);
@@ -183,11 +196,24 @@ function spawnNext(t) {
   return { created: [copy, ...kids], closed };
 }
 
+// カードを列へ移す（今日やる＝今日の印を付ける／ToDo・そのうちやる＝印を外して pri を変える）
+function moveTo(id, key) {
+  const t = byId(id);
+  if (colOf(t) === key) return;
+  const before = { pri: t.pri, todayOn: t.todayOn };
+  if (key === 'today') t.todayOn = iso(today());
+  else { t.todayOn = null; t.pri = key; childrenOf(t.id).forEach(k => k.pri = key); }
+  save(); render();
+  toast(`「${colName(key)}」に移しました`, () => {
+    t.pri = before.pri; t.todayOn = before.todayOn; childrenOf(t.id).forEach(k => k.pri = before.pri); save(); render();
+  });
+}
+
 // ---- フォーム ----
 const $ = id => document.getElementById(id);
-let formPri = 2;
+let formPri = 3; // フォームで選んだ列（'today' / 3 / 2）
 
-function setPri(p) { formPri = p; document.querySelectorAll('#fPri button').forEach(b => b.classList.toggle('on', +b.dataset.pri === p)); }
+function setPri(p) { formPri = p; document.querySelectorAll('#fPri button').forEach(b => b.classList.toggle('on', parseCol(b.dataset.pri) === p)); }
 
 function openForm(t, preset = {}) {
   editingId = t ? t.id : null;
@@ -199,7 +225,7 @@ function openForm(t, preset = {}) {
   $('fRemind').value = t?.remind || '';
   $('fCat').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   $('fCat').value = t?.cat || preset.cat || (filter !== 'all' ? filter : CATEGORIES[0].id);
-  setPri(t?.pri || preset.pri || 2);
+  setPri(t ? colOf(t) : (preset.col ?? 3));
 
   fillRepeat(t?.repeat || '');
 
@@ -242,7 +268,9 @@ $('form').addEventListener('submit', e => {
     title, memo: $('fMemo').value.trim() || undefined,
     due: $('fDue').value || null,
     parent: parentId,
-    pri: parent ? parent.pri : formPri,
+    // 今日やるを選んだときは、元の列（pri）はそのまま。新しいタスクは ToDo を元の列にする
+    pri: parent ? parent.pri : formPri === 'today' ? (editingId ? byId(editingId).pri : 3) : formPri,
+    todayOn: !parent && formPri === 'today' ? iso(today()) : null,
     cat: parent ? parent.cat : $('fCat').value,
     assignee: $('fWho').value.trim() || null,
     remind: $('fWho').value.trim() ? ($('fRemind').value || null) : null,
@@ -261,7 +289,7 @@ $('form').addEventListener('submit', e => {
     if (!t.repeat) delete t.repeat;
     tasks.push(t);
     if (parent) openSubs.add(String(parent.id));
-    mobilePri = t.pri;
+    mobileCol = colOf(t);
   }
   save(); closeForm(); render();
 });
@@ -282,7 +310,7 @@ $('fPri').onclick = e => { const b = e.target.closest('[data-pri]'); if (b) setP
 document.querySelectorAll('[data-due]').forEach(b => b.onclick = () => { $('fDue').value = b.dataset.due === '' ? '' : addDays(+b.dataset.due); fillRepeat($('fRepeat').value); });
 $('fDue').onchange = () => fillRepeat($('fRepeat').value);
 document.querySelectorAll('[data-remind]').forEach(b => b.onclick = () => { $('fRemind').value = addDays(+b.dataset.remind); });
-$('fab').onclick = () => openForm(null, { pri: window.innerWidth <= 760 ? mobilePri : 2 });
+$('fab').onclick = () => openForm(null, { col: window.innerWidth <= 760 ? mobileCol : 3 });
 $('showDone').onchange = e => { showDone = e.target.checked; render(); };
 
 // ---- クリック操作 ----
@@ -291,13 +319,14 @@ document.addEventListener('click', e => {
   let el;
   if (q('a')) return; // リンクはそのまま開く
   if ((el = q('[data-chk]'))) return toggleDone(el.dataset.chk);
+  if ((el = q('[data-today]'))) { const t = byId(el.dataset.today); return moveTo(t.id, isToday(t) ? (t.pri === 3 ? 3 : 2) : 'today'); }
   if ((el = q('[data-edit]'))) return openForm(byId(el.dataset.edit));
   if ((el = q('[data-addsub]'))) return openForm(null, { parent: el.dataset.addsub });
-  if ((el = q('[data-addpri]'))) return openForm(null, { pri: +el.dataset.addpri });
+  if ((el = q('[data-addcol]'))) return openForm(null, { col: parseCol(el.dataset.addcol) });
   if ((el = q('[data-unfold]'))) { openSubs.add(el.dataset.unfold); return render(); }
   if ((el = q('[data-fold]'))) { openSubs.delete(el.dataset.fold); return render(); }
   if ((el = q('[data-f]'))) { filter = el.dataset.f; return render(); }
-  if ((el = q('[data-tab]'))) { mobilePri = +el.dataset.tab; return render(); }
+  if ((el = q('[data-tab]'))) { mobileCol = parseCol(el.dataset.tab); return render(); }
   if ((el = q('[data-came]'))) return toggleDone(el.dataset.came);
   if ((el = q('[data-notyet]'))) {
     const t = byId(el.dataset.notyet); t.remind = addDays(3); save(); render();
@@ -305,7 +334,7 @@ document.addEventListener('click', e => {
   }
 });
 
-// ---- ドラッグで優先度を変える（PC） ----
+// ---- ドラッグで列を移す（PC） ----
 let dragId = null;
 document.addEventListener('dragstart', e => {
   const card = e.target.closest('[data-card]');
@@ -324,13 +353,7 @@ document.addEventListener('drop', e => {
   const col = e.target.closest('[data-col]');
   if (!col || dragId === null) return;
   e.preventDefault();
-  const t = byId(dragId), pri = +col.dataset.col;
-  if (t.pri !== pri) {
-    const before = t.pri;
-    t.pri = pri; childrenOf(t.id).forEach(k => k.pri = pri);
-    save(); render();
-    toast(`優先度を「${PRI[pri]}」にしました`, () => { t.pri = before; childrenOf(t.id).forEach(k => k.pri = before); save(); render(); });
-  }
+  moveTo(dragId, parseCol(col.dataset.col));
   dragId = null;
 });
 
